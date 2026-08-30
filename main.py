@@ -8,11 +8,6 @@ from security import hash_password, verify_password
 app = FastAPI()
 
 
-@app.get("/")
-def greet():
-    return {"message": "Hello, welcome to the program!"}
-
-
 @app.post("/auth/signup", response_model=UserResponse)
 def signup(user: UserCreate, db: Session = Depends(get_db)):
     existing_user = db.query(User).filter(User.email == user.email).first()
