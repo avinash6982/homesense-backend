@@ -1,9 +1,9 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
-from schemas import UserCreate, UserLogin, UserResponse
+from schemas import UserCreate, UserLogin, UserResponse, TokenResponse
 from models import User
-from security import hash_password, verify_password
+from security import hash_password, verify_password, create_access_token, create_refresh_token, get_current_user
 
 app = FastAPI()
 
@@ -22,7 +22,7 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     return new_user
 
 
-@app.post("/auth/signin", response_model=UserResponse)
+@app.post("/auth/signin", response_model=TokenResponse)
 def signin(user: UserLogin, db: Session = Depends(get_db)):
     existing_user = db.query(User).filter(User.email == user.email).first()
     if not existing_user:
@@ -31,4 +31,13 @@ def signin(user: UserLogin, db: Session = Depends(get_db)):
     if not verify_password(user.password, existing_user.hashed_password):
         raise HTTPException(status_code=400, detail="Invalid email or password")
 
-    return existing_user
+    token_data = {"sub": str(existing_user.id)}
+    access_token = create_access_token(token_data)
+    refresh_token = create_refresh_token(token_data)
+
+    return {"access_token": access_token, "refresh_token": refresh_token}
+
+
+@app.get("/auth/me", response_model=UserResponse)
+def read_current_user(current_user: User = Depends(get_current_user)):
+    return current_user
