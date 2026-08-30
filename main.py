@@ -1,5 +1,8 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from database import get_db
 from schemas import UserCreate, UserLogin, UserResponse, TokenResponse, RefreshRequest
 from models import User
@@ -15,9 +18,14 @@ from security import (
 
 app = FastAPI()
 
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 @app.post("/auth/signup", response_model=UserResponse)
-def signup(user: UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("3/minute")
+def signup(request: Request, user: UserCreate, db: Session = Depends(get_db)):
     existing_user = db.query(User).filter(User.email == user.email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -31,7 +39,8 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
 
 
 @app.post("/auth/signin", response_model=TokenResponse)
-def signin(user: UserLogin, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def signin(request: Request, user: UserLogin, db: Session = Depends(get_db)):
     existing_user = db.query(User).filter(User.email == user.email).first()
     if not existing_user:
         raise HTTPException(status_code=400, detail="Invalid email or password")
